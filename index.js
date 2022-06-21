@@ -9,10 +9,12 @@ const ERROR_MSG = {
     },
 }
 
-const available_types = ["String", "Number", "Array", "Object"];
+const available_types = ["String", "Number", "Array", "Object", "Any"];
 
 function type_of(data, type) {
     switch (type) {
+        case "Any":
+            return true;
         case "String":
             return typeof data === "string";
         case "Number":
@@ -56,23 +58,32 @@ function function_builder(return_type, parameters_type, callback) {
         return is_it;
     }
 
+    // Do we return the value or not ??? In case an error is detected
+    let do_return_value = true;
+    const set_return_value_false = () => { do_return_value = false; }
+
     if (return_type === null || return_type === undefined) {
+        set_return_value_false();
         ERROR_MSG.Function(`function_builder::return_type`, "The return type should not be empty.");
     }
 
     if (parameters_type === null || parameters_type === undefined) {
+        set_return_value_false();
         ERROR_MSG.Function(`function_builder::parameter_type`, "The parameter types should not be empty.");
     }
 
     if (callback === null || callback === undefined) {
+        set_return_value_false();
         ERROR_MSG.Function(`function_builder::callback`, "The callback type should not be empty.");
     }
     if (!instance_of(callback, Function)) {
+        set_return_value_false();
         ERROR_MSG.Function(`function_builder::callback`, "The callback should be a Function.");
     }
 
     return function callback_exe(...args) {
         if (args.length != callback.length) {
+            set_return_value_false();
             ERROR_MSG.Function(`function_builder::${callback_exe.name}`, "Numbers of given values not matching callback arguments numbers");
         }
 
@@ -84,15 +95,18 @@ function function_builder(return_type, parameters_type, callback) {
                 // This is a regular type
                 if (is_a_regular_type(return_type, true)) {
                     if (!type_of(cb_value, return_type)) {
+                        set_return_value_false();
                         ERROR_MSG.Function(callback.name ? `function_builder::return_type::${callback.name}` : "function_builder::return_type::callback()", "Callback doesn't return the type wanted.");
                     }
                 }
             } else {
                 try {
                     if (!instance_of(cb_value, return_type)) {
+                        set_return_value_false();
                         ERROR_MSG.Function(callback.name ? `function_builder::return_type::${callback.name}` : "function_builder::return_type::callback()", "Callback doesn't return the instance wanted.");
                     }
                 } catch(e) {
+                    set_return_value_false();
                     ERROR_MSG.Function(callback.name ? `function_builder::return_type::${callback.name}` : "function_builder::return_type::callback()", "Wrong syntax.");
                 }
             }
@@ -108,6 +122,7 @@ function function_builder(return_type, parameters_type, callback) {
             }
 
             if (args.length != param_types.length) {
+                set_return_value_false();
                 ERROR_MSG.Function(`function_builder::${callback_exe.name}`, "Numbers of arguments used in the callback function call are different than parameters types given");
             }
 
@@ -120,21 +135,24 @@ function function_builder(return_type, parameters_type, callback) {
                     is_a_regular_type(type_or_instance, true);
 
                     if (!type_of(args[index], type_or_instance)) {
+                        set_return_value_false();
                         ERROR_MSG.Function(
                             callback.name ? `function_builder::parameter_type::${callback.name}` : "function_builder::parameter_type::callback()",
                             `callback parameter not matching with Type needed [given: ${get_type(args[index])}, wanted: ${type_or_instance}]`
                         );
                     }
-                } else {
                     // Instance matching
+                } else {
                     try {
                         if (!instance_of(args[index], type_or_instance)) {
+                            set_return_value_false();
                             ERROR_MSG.Function(
                                 callback.name ? `function_builder::parameter_type::${callback.name}` : "function_builder::parameter_type::callback()",
                                 `callback parameter not matching with Instance needed [given: ${args[index]}, wanted: ${type_or_instance.name}]`
                             );
                         }
                     } catch (e) {
+                        set_return_value_false();
                         ERROR_MSG.Function(
                             callback.name ? `function_builder::parameter_type::${callback.name}` : "function_builder::parameter_type::callback()",
                             `Wrong syntax`
@@ -145,10 +163,14 @@ function function_builder(return_type, parameters_type, callback) {
         }
 
         // Atfer all those verifications we can gladly send the return value!
-        return callback.apply(null, args);
+        if (do_return_value) {
+            return callback.apply(null, args);
+        }
     }
 };
 
-const fnc = function_builder("Number", "Number", function fnc(value) {
-    return value;
-})
+const fnc = function_builder("String", "Any", function fnc(value) {
+    return String(value);
+});
+
+console.log(fnc(5));

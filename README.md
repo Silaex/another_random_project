@@ -6,4 +6,4 @@ goal of the project: building a mini game??? I don't know
 
 ## TODO
 
-- [x] https://github.com/Silaex/another_random_project/issues/1 :tada:
+Go to notes.txt :smile:

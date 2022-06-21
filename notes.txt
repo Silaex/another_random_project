@@ -1,6 +1,6 @@
 This is where I will put some bug or else and maybe sometimes come back to it and resolve some issues :-)
 
-[ ] Being able to put "structure precision" on 'function_builder' types [Exmaple: Array<Array<Number>>].
+[ ] Being able to put "structure precision" on 'function_builder' types [Example: Array<Array<Number>>].
     So only a two level array with numbers could pass.
 
-[ ] Being able to put an "Any" type thing => 'function_builder'
+[x] Being able to put an "Any" type thing => 'function_builder'
