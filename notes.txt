@@ -2,5 +2,8 @@ This is where I will put some bug or else and maybe sometimes come back to it an
 
 [ ] Being able to put "structure precision" on 'fb' types [Example: Array<Array<Number>>].
     So only a two level array with numbers could pass.
+    IDEA: because this will be in a String like this "Array<Array<Number>>" we will need to put some TOKEN??KEY???SYMBOL??? to recognize INSTANCE from TYPES like this maybe...
+            Type(Type): "Array<Array<Number>>"
+            Instance(*Instance): "Array<Array<*Number>>"
 
 [x] Being able to put an "Any" type thing => 'fb'
