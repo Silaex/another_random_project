@@ -6,8 +6,49 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>random_project</title>
         <script src="./index.js" type="module"></script>
+        <style media="screen">
+            html {
+                height: 100%;
+            }
+            body {
+                display: flex;
+                min-height: 100%;
+                margin: 0;
+                font-family: Arial;
+            }
+            h1, h2, h3, h4, h5, h6 {
+                margin: 0;
+            }
+            .flex-1 {
+                flex: 1;
+            }
+            .flex {
+                display: flex;
+            }
+            .f-column {
+                flex-direction: column;
+            }
+            .f-center-all {
+                justify-content: center;
+                align-items: center;
+            }
+            .screen-height {
+                height: 100%;
+            }
+            @keyframes bobbing {
+                50% {
+                    transform: translateY(-24px);
+                }
+            }
+        </style>
     </head>
-    <body style="background: black;">
-        <div id="root"></div>
+    <body style="background: #111; color: #f1f1f1">
+        <div id="root" class="flex-1">
+            <div id="app-title" class="screen-height flex f-column f-center-all center">
+                <h1 id="big-title">ANOTHER_RANDOM_PROJECT</h1>
+                <h3>Open the console (F12)</h3>
+                <h5>or right-click => inspect page</h5>
+            </div>
+        </div>
     </body>
 </html>

@@ -7,3 +7,6 @@ This is where I will put some bug or else and maybe sometimes come back to it an
             Instance(*Instance): "Array<Array<*Number>>"
 
 [x] Being able to put an "Any" type thing => 'fb'
+
+[ ] Puzzle must always be surrounded by walls. The only opening
+should be a DOOR cell to another puzzle
