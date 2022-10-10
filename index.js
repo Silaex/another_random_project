@@ -67,6 +67,8 @@ function instance_of(data, instance) {
 
 // It works only with available_types. It does not work with instances
 function get_type(data) {
+    if (data === undefined) return "undefined";
+
     for (let i = 0; i < available_types.length; i++) {
         const type = available_types[i];
         if (type_of(data, type)) {
@@ -80,9 +82,24 @@ function get_type(data) {
     return null;
 }
 
-function fn(return_type, parameters_type, callback) {
+function _regex(regex, str) {
+    const results = [];
+    let result;
+    while (result = regex.exec(str)) {
+        results.push(result);
+    }
+
+    return {
+        results: results,
+        indexes: results.map(r => r.index)
+    };
+}
+
+// A typed function builder... OMG BUT THERE IS TYPESCRIPT WHY DOING THIS????????.... Bad programmer.... :-)
+// parameter "context" is useful for when you use this function in classes
+function fn(return_type, parameters_type, callback, context = null) {
     function is_a_regular_type(type, error_message = false) {
-        const is_it = available_types.findIndex(t => type === t) !== -1;
+        const is_it = available_types.findIndex(t => type === t) !== -1 || String(type).startsWith("Array");
         // more useless stuff??? yeah!!! idk...
         if (error_message && !is_it) {
             ERROR_MSG.Function(`fn::${is_a_regular_type.name}()`, `Be careful! You mispelled a type. Maybe you wanted to type one of those types [given: ${type}][available: ${available_types}]`);
@@ -91,38 +108,83 @@ function fn(return_type, parameters_type, callback) {
         return is_it;
     }
 
-    // letting the option to put only ONE parameter type without puttin an array
+    // letting the option to put only ONE parameter type without putting an array
     let param_types = parameters_type;
 
     if (!type_of(parameters_type, "Array")) {
         param_types = Array(param_types);
     }
 
-    // Do we return the value or not ??? In case an error is detected
-    let do_return_value = true;
-    const set_return_value_false = () => { do_return_value = false; }
-
     if (return_type === null || return_type === undefined) {
-        set_return_value_false();
         ERROR_MSG.Function(`fn::return_type`, "The return type should not be empty.");
     }
 
     if (parameters_type === null || parameters_type === undefined) {
-        set_return_value_false();
         ERROR_MSG.Function(`fn::parameter_type`, "The parameter types should not be empty.");
     }
 
     if (callback === null || callback === undefined) {
-        set_return_value_false();
         ERROR_MSG.Function(`fn::callback`, "The callback type should not be empty.");
     }
 
     if (!instance_of(callback, Function)) {
-        set_return_value_false();
         ERROR_MSG.Function(`fn::callback`, "The callback should be a Function.");
     }
 
-    if (!do_return_value) return;
+    if (!type_of(context, "Object")) {
+        ERROR_MSG.Function(`fn::context`, "The context should be an object.");
+    }
+
+    // ####################################### ⬇⬇⬇⬇⬇⬇ Array Syntax Checking ⬇⬇⬇⬇⬇⬇ ##############################################################
+    // Must build a unique way for checking the Array Syntax "Array::Array::Type" or "Array<Array<Type>>"
+    // Filter to have only the Array ones
+    const array_params_indexes = [];
+    const array_params = param_types.filter((param, index) => {
+        if (type_of(param, "String") && param.startsWith("Array")) {
+            // disgusting way to do maybe but i'm not here to apply to your company
+            array_params_indexes.push(index);
+            return param;
+        }
+    });
+
+    const regex_begin = /</gi;
+    const regex_end = />/gi;
+    let results_begin = [];
+    let results_end = [];
+    const array_params_infos = [];
+
+    array_params.forEach((param, i) => {
+        results_begin = _regex(regex_begin, param).indexes;
+        results_end = _regex(regex_end, param).indexes;
+
+        // Same results array length checking between LESS EQUALS and GREATER THAN signs
+        if (results_begin.length != results_end.length) {
+            ERROR_MSG.Function(`fn{region:Array Syntax Checking}`, "Syntax Error");
+        }
+
+        let array_depth = results_begin.length;
+        let array_check_offset = 0;
+        let array_str = param;
+
+        while (array_depth > 0) {
+            if (array_depth === 1) {
+                // we register the final type for checking in "fn__callback_exe"
+                array_params_infos.push({
+                    final_type: array_str.substring(results_begin[array_check_offset]+1, results_end[0]),
+                    array_depth: results_begin.length
+                });
+            }
+
+            array_check_offset++;
+            array_depth--;
+        }
+    });
+
+    // WARNING: If there is no CLASS or REGULAR TYPE checking for syntax is it because
+    //          the param type is written in String so CLASS can't be checked or would need another syntax
+    //          so WE (our solo team) prefers to check this in the callback use. :-) enjoy
+
+    // ####################################### ￪￪￪￪￪￪ Array Syntax Checking ￪￪￪￪￪￪  ##############################################################
 
     return function fn__callback_exe(...args) {
 
@@ -132,15 +194,63 @@ function fn(return_type, parameters_type, callback) {
         //     ERROR_MSG.Function(`fn::${fn__callback_exe.name}`, "Numbers of given values not matching callback arguments numbers");
         // }
 
+        // Here we check if the final type and the depth of arrays are the same as given arguments
+        array_params_infos.forEach(({ final_type, array_depth }, index) => {
+            const array_arg_to_check = args[array_params_indexes[index]];
+            // Check arrays layers
+            if (!type_of(array_arg_to_check, "Array")) {
+                ERROR_MSG.Function("fn__callback_exe", `[Given: ${get_type(array_arg_to_check)}, wanted: Array]`);
+            }
+
+            function array_inspector(array, depth) {
+                for (let i = 0; i < array.length; i++) {
+                    if (depth !== 0) {
+                        if (!type_of(array[i], "Array")) {
+                            // In case there is no array nested
+                            if (array[i] === undefined) {
+                                return;
+                            }
+
+                            // ERROR why there is not an array when it's expected ???
+                            ERROR_MSG.Function("fn__callback_exe::array_inspector",
+                                `You are nesting something that is not an array :-)`
+                            );
+                        } else {
+                            array_inspector(array[i], depth-1);
+                        }
+                    } else {
+                        if (final_type === "Any") {
+                            return;
+                        } else {
+                            // Checking all elements type
+                            for (let j = 0; j < array.length; j++) {
+                                const element = array[j];
+                                const element_type = get_type(element);
+                                if (element_type !== final_type) {
+                                    ERROR_MSG.Function("fn__callback_exe::array_inspector", `Wrong type used! [wanted: ${final_type}, given: ${element_type}]`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            array_inspector(array_arg_to_check, array_depth-1);
+            for (let i = array_depth-1; i > 0; i--) {
+                if (array_arg_to_check.length - i > 0) {
+                    continue;
+                }
+            }
+        });
 
         // We have to put type default value to arguments for not given parameters
         // Why??? idk...
-        for (var i = 0; i < param_types.length; i++) {
+        for (let i = 0; i < param_types.length; i++) {
             const arg = args[i];
             const type = param_types[i];
 
             if (is_a_regular_type(type)) {
-                if (type === "Array" && arg === undefined) args[i] = [];
+                if (type.startsWith("Array") && arg === undefined) args[i] = [];
                 if (type === "Object" && arg === undefined) args[i] = {};
                 if (type === "String" && arg === undefined) args[i] = "";
                 if (type === "Number" && arg === undefined) args[i] = 0;
@@ -150,7 +260,10 @@ function fn(return_type, parameters_type, callback) {
                 if (arg === undefined) args[i] = null;
             }
         }
-        const cb_return_value = callback.apply(null, args);
+
+        // Here we execute the callback function to get his rsult and analyze it below
+        // The context parameter is useful for when the function is a class method
+        const cb_return_value = callback.apply(context, args);
 
         // return_type checking
         {
@@ -158,13 +271,11 @@ function fn(return_type, parameters_type, callback) {
                 // This is a regular type
                 if (is_a_regular_type(return_type, true)) {
                     if (!type_of(cb_return_value, return_type)) {
-                        set_return_value_false();
                         ERROR_MSG.Function(callback.name ? `fn::return_type::${callback.name}` : "fn::return_type::callback()", "Callback doesn't return the type wanted.");
                     }
                 }
             } else {
                 if (!instance_of(cb_return_value, return_type)) {
-                    set_return_value_false();
                     ERROR_MSG.Function(callback.name ? `fn::return_type::${callback.name}` : "fn::return_type::callback()", "Callback doesn't return the instance wanted.");
                 }
             }
@@ -185,9 +296,7 @@ function fn(return_type, parameters_type, callback) {
                         // Type checking
                         // Here just to warn about the mispelling if there is one
                         is_a_regular_type(type_or_instance, true);
-
-                        if (!type_of(args[index], type_or_instance)) {
-                            set_return_value_false();
+                        if (!type_of(args[index], type_or_instance) && !type_or_instance.startsWith("Array")) {
                             ERROR_MSG.Function(
                                 callback.name ? `fn::parameter_type::${callback.name}` : "fn::parameter_type::callback()",
                                 `callback parameter not matching with Type needed [given: ${get_type(args[index])}, wanted: ${type_or_instance}]`
@@ -196,7 +305,6 @@ function fn(return_type, parameters_type, callback) {
                     } else {
                         // Instance matching
                         if (!instance_of(args[index], type_or_instance)) {
-                            set_return_value_false();
                             ERROR_MSG.Function(
                                 callback.name ? `fn::parameter_type::${callback.name}` : "fn::parameter_type::callback()",
                                 `callback parameter not matching with Instance needed [given: ${args[index]}, wanted: ${type_or_instance.name}]`
@@ -207,30 +315,231 @@ function fn(return_type, parameters_type, callback) {
             }
 
         // Atfer all those verifications we can gladly send the return value!
-        if (do_return_value) {
-            return cb_return_value;
-        }
+        return cb_return_value;
     }
 };
 
-const create_element = fn(HTMLElement, ["String", "Object", "Array"], function create_element(type, properties, childrens) {
-    if (!type) ERROR_MSG.Function("create_element", "Give at least a type :-O");
-    const element = document.createElement(type);
+const array_add = fn("Array", ["Array", "Any"], function array_add(arr, value) {
+    arr.push(value);
+    return arr;
+});
 
-    for (const property in properties) {
-        if (properties.hasOwnProperty(property)) {
-            element[property] = properties[property];
+const object_add = fn("Object", ["Object", "String", "Any"], function object_add(obj, key, value) {
+    obj[key] = value;
+    return obj;
+});
+
+const object_type_inspector = fn("Object", ["String", "Object"], function object_type_inspector(type, object_to_inspect) {
+    Object.keys(object_to_inspect).forEach(key => {
+        if (!type_of(object_to_inspect[key]), type) {
+            ERROR_MSG.Function("object_type_inspector", `Your object has another value type than the one asked [asked: ${type}]`);
         }
-    }
+    });
+    return object_to_inspect;
+});
 
-    return element;
+const object_instance_inspector = fn("Object", ["Any", "Object"], function object_instance_inspector(instance, object_to_inspect) {
+    if (!is_instance(instance)) {
+        ERROR_MSG.Function("object_instance_inspector", `You have not given an instance (class)`);
+    }
+    Object.keys(object_to_inspect).forEach(key => {
+        if (!instance_of(object_to_inspect[key], instance)) {
+            ERROR_MSG.Function("object_instance_inspector", `Your object has another value instance than the one asked [asked: ${instance.name}]`);
+        }
+    });
+    return object_to_inspect;
 });
 
 // Computer
-const append_element = fn(HTMLElement, [HTMLElement, "Array"], function append_element(parent, childrens) {
-    
-});
+{
+    // This is for preventing user to use right-click for building our own
+    document.oncontextmenu = function(event) {
+        event.preventDefault();
+        return false;
+    }
 
+    const get_element_by_class = fn(HTMLElement, ["String"], function(class_name) {
+        return document.getElementByClassName(class_name);
+    });
+
+    const get_element_by_id = fn(HTMLElement, ["String"], function(id) {
+        return document.getElementById(id);
+    });
+
+    const create_element = fn(HTMLElement, ["String", "Object", "Array"], function create_element(type, properties, childrens) {
+        if (!type) ERROR_MSG.Function("create_element", "Give at least a type :-O");
+        const element = document.createElement(type);
+
+        for (const property in properties) {
+            if (property !== "style") {
+                element[property] = properties[property];
+            } else {
+                for (const prop in properties[property]) {
+                    element.style[prop] = properties[property][prop];
+                }
+            }
+        }
+
+        const ch = childrens;
+        if (!Array.isArray(childrens)) {
+            ch = Array(ch);
+        }
+
+        append_element(element, childrens);
+
+        return element;
+    });
+
+
+    const append_element = fn(HTMLElement, [HTMLElement, "Array"], function append_element(parent, childrens) {
+        parent.append(...childrens);
+        return parent;
+    });
+
+    const html_root = get_element_by_id("root");
+
+    const COMPUTER = {
+        errors: {
+            // This is an error that is there but will it be used??? bah j'en sais rien
+            unknown: "[Computer System::error::unknown] DID YOU DO SOMETHING WRONG!!!???",
+            app_not_found: "[Computer System::error::app_not_found] This application has not been found!",
+        },
+        ui: {
+            WINDOWS: [],
+            FOLDERS: [],
+        },
+        applications: {
+            instances: {}
+        },
+        style: {
+            WINDOW: {
+                bg: {
+                    main: "#f1f1f1",
+                    title: "#d1d1d1",
+                    content: "transparent"
+                }
+            }
+        }
+    }
+
+    class Win {
+        constructor(width, height, name) {
+            this.width = type_of_init("Number", width, "class::_Window::width");
+            this.height = type_of_init("Number", height, "class::_Window::height");
+            this.name = type_of_init("String", name, "class::_Window::name");
+
+            const WINDOW_STYLE = {
+                main: {
+                    display: "flex",
+                    flexDirection: "column",
+                    width: width + "px",
+                    minWidth: "420px",
+                    height: height + "px",
+                    minHeight: "360px",
+                    borderRadius: ".33rem",
+                    overflow: "hidden",
+                    background: COMPUTER.style.WINDOW.bg.main,
+                    border: "solid 3px" + COMPUTER.style.WINDOW.bg.title
+                },
+                title: {
+                    display: "flex",
+                    alignItems: "center",
+                    width: "100%",
+                    height: "32px",
+                    padding: "0 8px",
+                    borderBottom: "solid 2px " + COMPUTER.style.WINDOW.bg.title
+                },
+                content: {
+                    flex: 1,
+                    padding: "8px",
+                    background: COMPUTER.style.WINDOW.bg.content,
+                    fontSize: "64px",
+                    overflowX: "hidden",
+                    overflowY: "auto",
+                    wordBreak: "break-word"
+                }
+            }
+
+            const ce = create_element;
+
+            this.HTML_ELEMENTS = {
+                window_main: ce("div", { className: "window--main", style: WINDOW_STYLE.main }),
+                window_title: ce("div", { className: "window--title", style: WINDOW_STYLE.title, textContent: "Window" }),
+                window_content: ce("div", { className: "window--content", style: WINDOW_STYLE.content }),
+            }
+
+            const th = this.HTML_ELEMENTS;
+            this.HTML_STRUCTURE = append_element(th.window_main, [
+                th.window_title,
+                th.window_content
+            ]);
+
+            // We add the window to the computer UI list
+            array_add(COMPUTER.ui.WINDOWS, this);
+        }
+
+        show = fn(Win, [], function show() {
+
+            return this;
+        }, this);
+
+        add_content = fn(Win, "Object", function add_content(content) {
+
+            return this;
+        });
+    }
+
+    class Application {
+        constructor(name, path, window = undefined) {
+            // MEMORY SIZE??? Strange man here
+            this.name = type_of_init("String", name, "class::Application::name");
+            this.path = type_of_init("String", path, "class::Application::path");
+            this.properties = {};
+            this.window = window;
+
+            // If the application is not registered in the computer applications
+            if (COMPUTER.applications[name] === undefined) {
+                COMPUTER.applications[name] = {};
+            } else {
+                if (COMPUTER.applications[name][path] !== undefined) {
+                    ERROR_MSG.Class("Application::constructor", "Another instance of this application is already there!");
+                }
+            }
+            object_add(COMPUTER.applications[name], path, this);
+        }
+
+        open = fn(Application, [], function open() {
+            // if this application has a window interface
+            if (this.window) {
+
+                this.window.show();
+            }
+            return this;
+        }, this);
+    }
+    object_add(COMPUTER.applications, "__application_class__", Application);
+
+    const open_application = fn(Win, Application, function open_application(app) {
+        const win = app.window;
+
+        if (!win) {
+
+        }
+
+        return win;
+    });
+
+    const add_content_to_window = fn(Win, [Win, HTMLElement], function add_content_to_window(window, content) {
+        append_element(window.HTML_ELEMENTS.content, content);
+        return window;
+    });
+
+    const wind = new Win(500, 500, "Window");
+    const cmd = new Application("cmd", "computer/applications/", wind);
+    new Application("cmd", "computer/");
+    console.log(COMPUTER, cmd);
+    cmd.open();
+}
 
 // Console Puzzle Game
 {
@@ -246,7 +555,7 @@ const append_element = fn(HTMLElement, [HTMLElement, "Array"], function append_e
     const debug_messages = [];
     const DEBUG = {
         write: fn("Any", "Any", (msg) => {
-            debug_messages.push(msg);
+            array_add(debug_messages, msg);
             return msg;
         }),
         show: fn("Array", [], function show() {
@@ -261,16 +570,6 @@ const append_element = fn(HTMLElement, [HTMLElement, "Array"], function append_e
             return debug_messages;
         })
     }
-
-    const array_add = fn("Array", ["Array", "Any"], function array_add(arr, value) {
-        arr.push(value);
-        return arr;
-    });
-
-    const object_add = fn("Object", ["Object", "String", "Any"], function object_add(obj, key, value) {
-        obj[key] = value;
-        return obj;
-    });
 
     const puzzles = {};
 
@@ -396,7 +695,7 @@ const append_element = fn(HTMLElement, [HTMLElement, "Array"], function append_e
             for (var j = 0; j < puzzle_str_array[i].length; j++) {
                 const cell_string = puzzle_str_array[i][j];
                 if (Object.keys(AVAILABLE_CELLS).includes(cell_string)) {
-                    cells_array.push(new Cell(cell_string, j, i));
+                    array_add(cells_array, new Cell(cell_string, j, i));
                 } else {
                     ERROR_MSG.Function("parsing_puzzle_cell_building", "There is an unknown cell in the string array")
                 }
@@ -541,7 +840,7 @@ const append_element = fn(HTMLElement, [HTMLElement, "Array"], function append_e
             "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
             "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
             "XXXXXXXXXX         XXXXXXXXXXX",
-            "XXXXXXXXXX XXXXXXX XXXXXXXXXXX",
+            "XXXXXXX            XXXXXXXXXXX",
             "XXXX       XXXX   #  XXXXXXXXX",
             "XXXX   0   XXXX      XXXXXXXXX",
             "XXXX       XXXXXXXXXXXXXXXXXXX",
