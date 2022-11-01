@@ -390,6 +390,10 @@ const object_instance_inspector = fn("Object", ["Any", "Object"], function objec
         return element;
     });
 
+    const create_event = fn("Any", [HTMLElement, "String", Function], function create_event(target, event_name, callback) {
+        target.addEventListener(event_name, callback);
+        return;
+    });
 
     const append_element = fn(HTMLElement, [HTMLElement, "Array"], function append_element(parent, childrens) {
         parent.append(...childrens);
@@ -399,15 +403,18 @@ const object_instance_inspector = fn("Object", ["Any", "Object"], function objec
     const html_root = get_element_by_id("root");
 
     const COMPUTER = {
+        data: {
+            mouse_x: 0,
+            mouse_y: 0,
+            mouse_pressed: false
+        },
         errors: {
             // This is an error that is there but will it be used??? bah j'en sais rien
             unknown: "[Computer System::error::unknown] DID YOU DO SOMETHING WRONG!!!???",
             app_not_found: "[Computer System::error::app_not_found] This application has not been found!",
         },
-        ui: {
-            WINDOWS: [],
-            FOLDERS: [],
-        },
+        WINDOWS: [],
+        FOLDERS: [],
         applications: {
             instances: {}
         },
@@ -415,12 +422,24 @@ const object_instance_inspector = fn("Object", ["Any", "Object"], function objec
             WINDOW: {
                 bg: {
                     main: "#f1f1f1",
-                    title: "#d1d1d1",
+                    title: "#222",
                     content: "transparent"
                 }
             }
         }
     }
+
+    // Event to get mouse coordinates
+    create_event(document.body, "mousemove", function(e) {
+        COMPUTER.data.mouse_x = e.x;
+        COMPUTER.data.mouse_y = e.y;
+    });
+    create_event(document.body, "mousedown", function(e) {
+        COMPUTER.data.mouse_pressed = true;
+    });
+    create_event(document.body, "mouseup", function(e) {
+        COMPUTER.data.mouse_pressed = false;
+    });
 
     class Win {
         constructor(width, height, name) {
@@ -436,24 +455,33 @@ const object_instance_inspector = fn("Object", ["Any", "Object"], function objec
                     minWidth: "420px",
                     height: height + "px",
                     minHeight: "360px",
-                    borderRadius: ".33rem",
+                    borderRadius: "0px",
                     overflow: "hidden",
                     background: COMPUTER.style.WINDOW.bg.main,
-                    border: "solid 3px" + COMPUTER.style.WINDOW.bg.title
+                    border: "solid 3px" + COMPUTER.style.WINDOW.bg.title,
+                    resize: "both"
                 },
                 title: {
                     display: "flex",
+                    justifyContent: "space-between",
                     alignItems: "center",
                     width: "100%",
                     height: "32px",
                     padding: "0 8px",
-                    borderBottom: "solid 2px " + COMPUTER.style.WINDOW.bg.title
+                    borderBottom: "solid 2px " + COMPUTER.style.WINDOW.bg.title,
+                    background: COMPUTER.style.WINDOW.bg.title,
+                    color: "#fff"
+                },
+                close_button: {
+                    width: "12px",
+                    height: "12px",
+                    background: "#f22",
+                    borderRadius: "50%",
+                    cursor: "pointer"
                 },
                 content: {
                     flex: 1,
-                    padding: "8px",
                     background: COMPUTER.style.WINDOW.bg.content,
-                    fontSize: "64px",
                     overflowX: "hidden",
                     overflowY: "auto",
                     wordBreak: "break-word"
@@ -464,36 +492,75 @@ const object_instance_inspector = fn("Object", ["Any", "Object"], function objec
 
             this.HTML_ELEMENTS = {
                 window_main: ce("div", { className: "window--main", style: WINDOW_STYLE.main }),
-                window_title: ce("div", { className: "window--title", style: WINDOW_STYLE.title, textContent: "Window" }),
+                window_title: ce("div", { className: "window--title", style: WINDOW_STYLE.title }),
+                window_title_name: ce("div", { className: "window--title-name", textContent: "Window" }),
+                window_close_button: ce("div", { className: "window--title-close", style: WINDOW_STYLE.close_button }),
                 window_content: ce("div", { className: "window--content", style: WINDOW_STYLE.content }),
             }
-
             const th = this.HTML_ELEMENTS;
+            console.log(append_element(th.window_title, [th.window_close_button]));
             this.HTML_STRUCTURE = append_element(th.window_main, [
-                th.window_title,
+                append_element(th.window_title, [
+                    th.window_title_name,
+                    th.window_close_button
+                ]),
                 th.window_content
             ]);
 
+            create_event(this.HTML_ELEMENTS.window_main, "mouseleave", (e) => {
+                this.width = parseInt(e.target.style.width);
+                this.height = parseInt(e.target.style.height);
+            });
+            create_event(this.HTML_ELEMENTS.window_main, "mouseenter", (e) => {
+                this.width = parseInt(e.target.style.width);
+                this.height = parseInt(e.target.style.height);
+            });
+            create_event(this.HTML_ELEMENTS.window_close_button, "click", (e) => {
+                this.close();
+            });
+
+            // window movement
+            {
+                create_event(this.HTML_ELEMENTS.window_title, "mousemove", (e) => {
+                    const layer_x = e.layerX;
+                    const layer_y = e.layerY;
+                });
+            }
+
+
             // We add the window to the computer UI list
-            array_add(COMPUTER.ui.WINDOWS, this);
+            array_add(COMPUTER.WINDOWS, this);
         }
 
-        show = fn(Win, [], function show() {
+        show = fn(Win, [HTMLElement], function show(parent) {
+            append_element(parent, [this.HTML_STRUCTURE]);
+            return this;
+        }, this);
 
+        close = fn(Win, [], function close() {
+            const index = COMPUTER.WINDOWS.indexOf(this);
+            COMPUTER.WINDOWS.splice(index);
+            this.HTML_STRUCTURE.remove();
             return this;
         }, this);
 
         add_content = fn(Win, "Object", function add_content(content) {
-
+            for (const key in content) {
+                if (Object.hasOwnProperty.call(content, key)) {
+                    const element = content[key];
+                    append_element(this.HTML_ELEMENTS.window_content, [element]);
+                    object_add(this.HTML_ELEMENTS, key, element);
+                }
+            }
+            
             return this;
-        });
+        }, this);
     }
 
     class Application {
-        constructor(name, path, window = undefined) {
+        constructor(name, window = undefined) {
             // MEMORY SIZE??? Strange man here
             this.name = type_of_init("String", name, "class::Application::name");
-            this.path = type_of_init("String", path, "class::Application::path");
             this.properties = {};
             this.window = window;
 
@@ -505,40 +572,45 @@ const object_instance_inspector = fn("Object", ["Any", "Object"], function objec
                     ERROR_MSG.Class("Application::constructor", "Another instance of this application is already there!");
                 }
             }
-            object_add(COMPUTER.applications[name], path, this);
+            object_add(COMPUTER.applications[name], name, this);
         }
 
         open = fn(Application, [], function open() {
             // if this application has a window interface
             if (this.window) {
-
-                this.window.show();
+                this.window.HTML_ELEMENTS.window_title_name.textContent = this.name;
+                this.window.show(html_root);
             }
             return this;
         }, this);
     }
     object_add(COMPUTER.applications, "__application_class__", Application);
 
-    const open_application = fn(Win, Application, function open_application(app) {
-        const win = app.window;
-
-        if (!win) {
-
+    class File {
+        constructor(name, path) {
+            this.name = type_of_init("String", name, "class::Application::name");
+            this.path = type_of_init("String", path, "class::Application::path");
+            this.properties = {
+                size: 0,
+                path
+            };
         }
+    }
 
+    const add_content_to_window = fn(Win, [Win, HTMLElement], function add_content_to_window(win, content) {
+        append_element(win.HTML_ELEMENTS.content, content);
         return win;
     });
 
-    const add_content_to_window = fn(Win, [Win, HTMLElement], function add_content_to_window(window, content) {
-        append_element(window.HTML_ELEMENTS.content, content);
-        return window;
+    const wind = new Win(1000, 500, "Window");
+    const video_player = new Application("Video Player", wind);
+    console.log(COMPUTER, video_player);
+    video_player.window.add_content({
+        video_player: create_element('video', { className: "application--video_player", src: "./videos/delawhere_deep_Space_love.mp4", controls: true, autoplay: true,
+            style: { background: "#222", width: "100%", height: "100%", display: "block" },
+        }),
     });
-
-    const wind = new Win(500, 500, "Window");
-    const cmd = new Application("cmd", "computer/applications/", wind);
-    new Application("cmd", "computer/");
-    console.log(COMPUTER, cmd);
-    cmd.open();
+    video_player.open();
 }
 
 // Console Puzzle Game
